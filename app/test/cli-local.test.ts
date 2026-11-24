@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { main } from '../../packages/cli/src/router.js'
 import type { Io } from '../../packages/cli/src/io.js'
 import { slugify } from '../../packages/cli/src/local/index.js'
+import { reviseAudio } from '../../packages/cli/src/commands/local.js'
 
 async function run(argv: string[], env: Record<string, string> = {}) {
   let stdout = ''
@@ -76,5 +77,42 @@ describe('video-agent local revise', () => {
     const missing = await run(['local', 'revise', dir, 'Make it orange'])
     expect(missing.code).toBe(2)
     expect(missing.stderr).toContain('has no source.tar.gz to revise.')
+  })
+
+  it("keeps the version's sound and voice-over unless a flag changes them", () => {
+    // A video made before versions recorded their sound is silent.
+    expect(reviseAudio({}, {}, false)).toEqual({ sound: 'silent', voice: false })
+    expect(reviseAudio({}, { sound: 'music', voice: true }, false)).toEqual({ sound: 'music', voice: true })
+    expect(reviseAudio({ sound: 'music_sfx', voice: true }, { sound: 'silent' }, false)).toEqual({
+      sound: 'music_sfx',
+      voice: true,
+    })
+    expect(reviseAudio({ noVoice: true, sound: 'silent' }, { sound: 'music', voice: true }, false)).toEqual({
+      sound: 'silent',
+      voice: false,
+    })
+    // Redoing scenes keeps both.
+    expect(reviseAudio({}, { sound: 'music', voice: true }, true)).toEqual({ sound: 'music', voice: true })
+    expect(() => reviseAudio({ voice: true }, { sound: 'music' }, true)).toThrow(/Redoing scenes keeps/)
+    expect(() => reviseAudio({ sound: 'loud' }, undefined, false)).toThrow(/--sound takes/)
+    expect(() => reviseAudio({ voice: true, noVoice: true }, undefined, false)).toThrow(/not both/)
+  })
+
+  it('refuses a bad --sound before doing anything', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'va-video-'))
+    writeFileSync(
+      join(dir, 'video.json'),
+      JSON.stringify({
+        title: 'T',
+        summary: '',
+        jobId: 'loc_1',
+        versions: [{ n: 1, width: 1920, height: 1080 }],
+      }),
+    )
+    mkdirSync(join(dir, 'v1'))
+    writeFileSync(join(dir, 'v1', 'source.tar.gz'), '')
+    const r = await run(['local', 'revise', dir, 'Add music', '--sound', 'loud'])
+    expect(r.code).toBe(2)
+    expect(r.stderr).toContain('--sound takes silent, music or music_sfx.')
   })
 })

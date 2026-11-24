@@ -590,10 +590,14 @@ Make the next version of a video you made with local.
 video-agent local revise <dir> <change>
 video-agent local revise ./videos/webhooks-launch "Make the end card orange"
 video-agent local revise ./videos/webhooks-launch --scene demo "Show the preview URL"
+video-agent local revise ./videos/webhooks-launch --voice --sound music "Add a voice-over and music"
 ```
 
 - `--agent <value>`: The coding agent: claude.
 - `--from-version <n>`: The version to change (default: the latest).
 - `--scene <value>` (repeatable): Only redo these scenes (id or label; repeatable). The rest stay as they are.
+- `--sound <value>`: silent, music or music_sfx. Default: the sound of the version you're changing.
+- `--voice`: Add a spoken voice-over (needs Python 3.10 to 3.13).
+- `--no-voice`: Drop the voice-over.
 - `--keep`: Keep the workspace (for debugging). A failed run's is always kept.
 - `--timeout <value>`: Give up after this long: 30m, 1h (default 40m).

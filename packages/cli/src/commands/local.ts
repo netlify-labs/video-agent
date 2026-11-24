@@ -138,6 +138,31 @@ const local: Handler = async (ctx) => {
   })
 }
 
+const SOUNDS = ['silent', 'music', 'music_sfx']
+
+/**
+ * A revision's sound and voice-over: the flags', else the version's it changes (as the server's revisions keep their
+ * parent's). Redoing scenes keeps both, so the flags are refused with --scene.
+ */
+export function reviseAudio(
+  flags: { sound?: string | undefined; voice?: boolean | undefined; noVoice?: boolean | undefined },
+  parent: { sound?: string | undefined; voice?: boolean | undefined } | undefined,
+  scoped: boolean,
+): { sound: NonNullable<LocalRunInput['sound']>; voice: boolean } {
+  if (flags.sound && !SOUNDS.includes(flags.sound))
+    throw new UsageError('--sound takes silent, music or music_sfx.')
+  if (flags.voice && flags.noVoice) throw new UsageError('Use --voice or --no-voice, not both.')
+  if (scoped && (flags.sound || flags.voice || flags.noVoice))
+    throw new UsageError(
+      "Redoing scenes keeps the video's sound and voice-over: leave out --sound, --voice and --no-voice, or leave out --scene.",
+    )
+  const kept = parent?.sound && SOUNDS.includes(parent.sound) ? parent.sound : 'silent'
+  return {
+    sound: (flags.sound ?? kept) as NonNullable<LocalRunInput['sound']>,
+    voice: flags.noVoice ? false : Boolean(flags.voice || parent?.voice),
+  }
+}
+
 const localRevise: Handler = async (ctx) => {
   const dir = resolve(arg(ctx, 0, 'dir'))
   const change = arg(ctx, 1, 'change')
@@ -154,12 +179,24 @@ const localRevise: Handler = async (ctx) => {
   const aspect = first?.width && first.height ? aspectOf(first.width, first.height) : '16:9'
   // --scene: only these scenes (ids or labels), refused before the agent starts as the server would refuse them.
   const names = sceneFlags(ctx)
+  const audio = reviseAudio(
+    {
+      sound: ctx.flags.sound as string | undefined,
+      voice: Boolean(ctx.flags.voice),
+      noVoice: Boolean(ctx.flags['no-voice']),
+    },
+    first,
+    names.length > 0,
+  )
   const scope = names.length ? localScope(source, names, from) : null
+  ctx.log('local.revise_audio', audio)
   return go(
     ctx,
     {
       prompt: change,
       aspect,
+      sound: audio.sound,
+      ...(audio.voice ? { voiceover: { voice: null, speed: null, script: null } } : {}),
       revision: {
         jobId: video.jobId,
         parentN: from,

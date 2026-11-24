@@ -47,6 +47,9 @@ video-agent local revise ./videos/webhooks-launch --scene demo "Show the preview
 
 # Add music, a voice-over and your own screenshot
 video-agent local "A product teaser" --voice --sound music --media ./shot.png:"The new dashboard"
+
+# Add sound to a video you already made
+video-agent local revise ./videos/webhooks-launch --voice --sound music "Add a voice-over and music"
 ```
 
 Each version lands in `./videos/<name>/vN/`:
@@ -108,7 +111,7 @@ Local mode (video-agent local):
 | Command                       | What it does                                                                                             |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `local <prompt>`              | Makes a video. `--aspect`, `--duration`, `--sound`, `--voice`, `--media`, `--look`, `--context`, `--out` |
-| `local revise <dir> <change>` | Makes the next version. `--scene` redoes only those scenes                                               |
+| `local revise <dir> <change>` | Makes the next version and keeps its sound. `--scene`, `--sound`, `--voice`, `--no-voice`                |
 | `record <url>`                | Records a web app in Chromium, with a pointer trace. `--privacy` hides emails, keys and tokens           |
 | `local demo <recording>`      | Makes a demo from a recording. `--quick` uses no agent and no model                                      |
 

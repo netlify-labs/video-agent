@@ -35,6 +35,9 @@ export interface VideoJson {
     width: number | null
     height: number | null
     files: string[]
+    /** What the version was made with, so a revision keeps it. Missing in older videos: silent. */
+    sound?: NonNullable<LocalRunInput['sound']>
+    voice?: boolean
   }[]
 }
 
@@ -213,6 +216,8 @@ function copyOut(
         width: num('width'),
         height: num('height'),
         files: kept,
+        sound: o.input.sound ?? 'silent',
+        voice: Boolean(o.input.voiceover),
       },
     ],
   }

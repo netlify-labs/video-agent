@@ -30,3 +30,6 @@ looks-build/
 context/look/
 context/recording/
 app/engines/remotion/node_modules/
+
+# Videos made here with `video-agent local`
+/videos/

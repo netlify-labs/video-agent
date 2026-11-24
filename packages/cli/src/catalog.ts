@@ -837,6 +837,12 @@ export const COMMANDS: CommandSpec[] = [
         multiple: true,
         description: 'Only redo these scenes (id or label; repeatable). The rest stay as they are.',
       },
+      sound: {
+        type: 'string',
+        description: "silent, music or music_sfx. Default: the sound of the version you're changing.",
+      },
+      voice: { type: 'boolean', description: 'Add a spoken voice-over (needs Python 3.10 to 3.13).' },
+      'no-voice': { type: 'boolean', description: 'Drop the voice-over.' },
       keep: {
         type: 'boolean',
         description: "Keep the workspace (for debugging). A failed run's is always kept.",
@@ -846,6 +852,7 @@ export const COMMANDS: CommandSpec[] = [
     examples: [
       'video-agent local revise ./videos/webhooks-launch "Make the end card orange"',
       'video-agent local revise ./videos/webhooks-launch --scene demo "Show the preview URL"',
+      'video-agent local revise ./videos/webhooks-launch --voice --sound music "Add a voice-over and music"',
     ],
     sdk: [],
     local: true,
