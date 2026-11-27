@@ -132,6 +132,15 @@ export class FakeIdentity implements IdentityPort {
   async settings() {
     return this.settingsValue
   }
+  invites: string[] = []
+  inviteFails = false
+  async invite(email: string) {
+    if (this.inviteFails) throw new Error('Identity invite returned 500')
+    if (this.invites.includes(email) || [...this.users.values()].some((u) => u.email === email))
+      return 'exists' as const
+    this.invites.push(email)
+    return 'invited' as const
+  }
 }
 
 export type RunScript = {

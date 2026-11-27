@@ -33,4 +33,21 @@ export const netlifyIdentity: IdentityPort = {
       throw e
     }
   },
+  // The library has no invite call, so this is Identity's own POST /invite with the operator token the Netlify
+  // runtime gives each function (the same one the library's admin calls use).
+  async invite(email) {
+    const ctx = (globalThis as { netlifyIdentityContext?: { url?: string; token?: string } })
+      .netlifyIdentityContext
+    if (!ctx?.url || !ctx.token) throw new Error('Identity has no operator token in this context')
+    const res = await fetch(`${ctx.url}/invite`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${ctx.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ email }),
+      signal: AbortSignal.timeout(8000),
+    })
+    if (res.ok) return 'invited'
+    const body = (await res.json().catch(() => ({}))) as { msg?: string }
+    if (res.status === 422 && /already|registered|exists/i.test(body.msg ?? '')) return 'exists'
+    throw new Error(`Identity invite returned ${String(res.status)}`)
+  },
 }

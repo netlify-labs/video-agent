@@ -260,7 +260,63 @@ async function identityChecks(
           }
         : {}),
     })
+    const invites = await inviteFirstAdmins(deps)
+    if (invites.invited.length > 0 || invites.failed.length > 0) {
+      add({
+        id: 'admin-invites',
+        label: 'Admin invites',
+        status: invites.failed.length > 0 ? 'warn' : 'ok',
+        detail: [
+          invites.invited.length > 0
+            ? `Invited ${invites.invited.join(', ')}: the email has a link to set a password.`
+            : '',
+          invites.failed.length > 0 ? `Could not invite ${invites.failed.join(', ')}.` : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+        ...(invites.failed.length > 0
+          ? { fix: `Invite them from the Identity tab: ${siteSettings}/identity` }
+          : {}),
+      })
+    }
   }
+}
+
+// A new deployment has Identity on (the first deploy enables it) but nobody in it, so the people in ADMIN_EMAILS get
+// an invite: an email with a link to set a password. Only while the app has no users at all, and once per address
+// for each running instance; Identity answers "exists" for an address it has already invited, so nobody is emailed
+// twice.
+const inviteAttempts = new WeakMap<Deps['identity'], Set<string>>()
+
+export async function inviteFirstAdmins(deps: Deps): Promise<{ invited: string[]; failed: string[] }> {
+  const out = { invited: [] as string[], failed: [] as string[] }
+  if (deps.config.adminEmails.length === 0) return out
+  const tried = inviteAttempts.get(deps.identity) ?? new Set<string>()
+  inviteAttempts.set(deps.identity, tried)
+  const todo = deps.config.adminEmails.filter((e) => !tried.has(e))
+  if (todo.length === 0) return out
+  try {
+    if ((await deps.store.listUsers()).length > 0) {
+      for (const e of todo) tried.add(e)
+      return out
+    }
+  } catch (e) {
+    // No database yet (or it's unreachable): the database check says so; try again on the next check.
+    deps.log.warn('setup.admin_invite_skipped', { error: e })
+    return out
+  }
+  for (const email of todo) {
+    try {
+      const result = await deps.identity.invite(email)
+      tried.add(email)
+      if (result === 'invited') out.invited.push(email)
+      deps.log.info('setup.admin_invite', { result })
+    } catch (e) {
+      deps.log.warn('setup.admin_invite_failed', { error: e })
+      out.failed.push(email)
+    }
+  }
+  return out
 }
 
 /** With Sign in with Netlify, Identity isn't used: the OAuth app, its redirect URI and the team rule are checked instead. */

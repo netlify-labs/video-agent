@@ -186,6 +186,8 @@ export interface IdentityPort {
   /** Live lookup; throws on outage, returns null when the user doesn't exist. */
   liveUser(id: string): Promise<IdentityUser | null>
   settings(): Promise<IdentitySettings | null>
+  /** Emails an invite to set a password. 'exists' when Identity already has that address (invited or signed up). */
+  invite(email: string): Promise<'invited' | 'exists'>
 }
 
 export type BlobStoreName =
