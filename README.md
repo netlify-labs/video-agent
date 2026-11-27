@@ -81,8 +81,8 @@ them later.
 | `ALLOWED_EMAIL_DOMAINS` | Who can sign up, like `acme.com,acme.co.uk`, or `invite-only`. |
 | `ADMIN_EMAILS`          | The first admins' email addresses.                             |
 
-Then enable Identity on the project and open `https://<your-site>/setup`. It checks everything and tells you what's
-left. The [deploy guide](docs/guides/deploy.md) covers deploying from a clone, sign-in with Netlify accounts, roles,
+The first deploy with `RUNNER_API_TOKEN` set turns on Netlify Identity for you. Then open
+`https://<your-site>/setup`. It checks everything and tells you what's left. The [deploy guide](docs/guides/deploy.md) covers deploying from a clone, sign-in with Netlify accounts, roles,
 the trust model and every setting.
 
 ## How it works

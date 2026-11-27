@@ -236,7 +236,7 @@ async function identityChecks(
       status: identity === null ? 'fail' : 'unknown',
       detail:
         identity === null ? 'Identity is not enabled on this project.' : 'Could not read Identity settings.',
-      fix: `Enable Identity: ${siteSettings}/configuration/identity`,
+      fix: `Enable Identity: ${siteSettings}/configuration/identity (a production deploy does it for you when RUNNER_API_TOKEN is set and builds can read it)`,
     })
   } else {
     const wantInviteOnly = mode === 'invite-only'

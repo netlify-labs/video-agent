@@ -2,7 +2,7 @@
 
 Three things finish the setup. The app's `/setup` page checks each one and links to the setting.
 
-1. **Turn on Identity:** Project configuration → Identity → Enable.
+1. **Check that Identity is on:** Project configuration → Identity. The first deploy turns it on when `RUNNER_API_TOKEN` is set; if you skipped the token, add it and redeploy, or choose Enable there.
    - If `ALLOWED_EMAIL_DOMAINS` is your company domain: keep registration **Open** and **autoconfirm off**, so people must confirm their email.
    - If it is `invite-only`: set registration to **Invite only** and invite people from the Identity tab.
 2. **Make sure Agent Runners is available** for your team (a credit-based plan with AI features and credits): this project should have an **Agent Runs** tab.

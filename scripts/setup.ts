@@ -22,6 +22,7 @@ import {
   type Site,
 } from './lib/netlify-setup.js'
 import { defaultAppName, defaultDescription, registerOpenverse } from './lib/openverse-setup.js'
+import { ensureIdentity } from './lib/identity-setup.js'
 
 const log = (msg: string) => {
   console.log(msg)
@@ -123,17 +124,14 @@ async function main() {
   }
   rl.close()
 
-  const identity = await api<{ id?: string }>(token, 'GET', `/sites/${site.id}/identity`)
-  if (identity.status === 404) {
-    const r = await api(token, 'POST', `/sites/${site.id}/identity`, {})
-    log(
-      r.status < 300
-        ? 'Enabled Identity.'
-        : `Could not enable Identity (HTTP ${r.status}); enable it in the Netlify UI.`,
-    )
-  } else {
-    log('Identity is already enabled.')
-  }
+  const identity = await ensureIdentity(token, site.id)
+  log(
+    identity.state === 'enabled'
+      ? 'Enabled Identity.'
+      : identity.state === 'already'
+        ? 'Identity is already enabled.'
+        : `Could not enable Identity (HTTP ${identity.state === 'failed' ? String(identity.status) : '?'}); enable it in the Netlify UI.`,
+  )
   if (domains.trim() === 'invite-only') {
     log('Invite-only: set Identity registration to "Invite only" in Project configuration → Identity.')
   }

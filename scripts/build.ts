@@ -16,6 +16,7 @@ import { buildMcpApp } from './lib/mcp-app.js'
 import { buildSkills } from './lib/skills.js'
 import { playerBuildOptions } from './lib/player-build.js'
 import { buildInfoModule, buildInfoOf, releaseTag } from './lib/build-info.js'
+import { ensureIdentityAtBuild } from './lib/identity-setup.js'
 import {
   buildContextDigest,
   PLANNING_CONTEXT_FILES,
@@ -169,6 +170,9 @@ log('build-env', {
     .filter((k) => /AGENT/.test(k))
     .sort(),
 })
+// People sign in with Netlify Identity, which a new project doesn't have on. The production build turns it on with
+// RUNNER_API_TOKEN (once: later builds find it on), so the Deploy to Netlify button needs no step in the Netlify UI.
+log('identity', { ...(await ensureIdentityAtBuild(process.env)) })
 // A video run's preview shows the video it rendered instead of the app; any other agent run (someone changing the app)
 // builds the app as usual. FORCE_UI_BUILD=true builds the app for a video run too.
 const videoRun = agentRun ? videoRunOf(repoRoot) : null
