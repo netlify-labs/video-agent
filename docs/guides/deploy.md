@@ -31,7 +31,8 @@ later under Project configuration > Environment variables (then redeploy). The `
 | `ALLOWED_EMAIL_DOMAINS` | Your company's email domains, comma-separated (`acme.com,acme.co.uk`), or `invite-only`. |
 | `ADMIN_EMAILS`          | The first admins' email addresses, comma-separated.                                      |
 
-The first deploy turns on **Identity** for you when `RUNNER_API_TOKEN` is set. Then follow the page Netlify shows
+The first deploy turns on **Identity** for you when `RUNNER_API_TOKEN` is set, and marks that variable as a secret
+(the button saves it as a plain one). Then follow the page Netlify shows
 after the deploy (it's [`USAGE.md`](../../USAGE.md)): set Identity's registration mode, open `https://<your-site>/setup` and create the first admin account. The setup page checks
 everything and links to whatever is left.
 
