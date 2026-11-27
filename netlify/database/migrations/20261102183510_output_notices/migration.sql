@@ -1,1 +1,0 @@
-ALTER TABLE "outputs" ADD COLUMN "notices" jsonb;

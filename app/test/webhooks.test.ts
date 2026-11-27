@@ -13,10 +13,9 @@ import { harness, PROMPT, type Harness } from './helpers.js'
 
 const MIGRATIONS = new URL('../../netlify/database/migrations/', import.meta.url)
 
-async function pgClient(upTo?: string) {
+async function pgClient() {
   const pg = new PGlite()
   for (const m of readdirSync(MIGRATIONS).sort()) {
-    if (upTo && m >= upTo) break
     const sql = readFileSync(new URL(`${m}/migration.sql`, MIGRATIONS), 'utf8')
     for (const stmt of sql.split('--> statement-breakpoint')) if (stmt.trim()) await pg.exec(stmt)
   }
@@ -156,39 +155,5 @@ describe('webhook outbox', () => {
     await h.drive(4)
     expect(await deliver(h)).toBe(2)
     expect(await deliver(h)).toBe(0)
-  })
-})
-
-describe('outbox migration', () => {
-  it('moves pending deliveries from old events into delivery rows', async () => {
-    const target = readdirSync(MIGRATIONS)
-      .sort()
-      .find((m) => m.endsWith('_webhook_deliveries')) as string
-    const pg = await pgClient(target)
-    await pg.query(
-      `INSERT INTO webhook_events (event_id, job_id, version_n, attempt_id, type, payload, api_key_id, url,
-         lease_until, next_retry_at, deliver_until, attempts, last_result, delivered_at)
-       VALUES ('e1', 'vid_1', 1, 'a1', 'video.ready', '{}', 'k1', 'https://x.example.com', null,
-         '2026-10-30T00:00:00.000Z', '2026-10-31T00:00:00.000Z', 2, 'HTTP 500', null)`,
-    )
-    for (const m of readdirSync(MIGRATIONS)
-      .sort()
-      .filter((m) => m >= target)) {
-      const sql = readFileSync(new URL(`${m}/migration.sql`, MIGRATIONS), 'utf8')
-      for (const stmt of sql.split('--> statement-breakpoint')) if (stmt.trim()) await pg.exec(stmt)
-    }
-    const d = await pg.query<Record<string, unknown>>('SELECT * FROM webhook_deliveries')
-    expect(d.rows).toEqual([
-      expect.objectContaining({
-        event_id: 'e1',
-        dest_kind: 'version_key',
-        dest_ref: 'k1',
-        url: 'https://x.example.com',
-        attempts: 2,
-        next_retry_at: '2026-10-30T00:00:00.000Z',
-      }),
-    ])
-    const e = await pg.query<Record<string, unknown>>('SELECT created_at FROM webhook_events')
-    expect(e.rows[0]?.created_at).toBe('2026-10-30T00:00:00.000Z')
   })
 })

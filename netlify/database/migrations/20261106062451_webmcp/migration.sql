@@ -1,1 +1,0 @@
-ALTER TABLE "settings" ADD COLUMN "webmcp_enabled" boolean DEFAULT true NOT NULL;

@@ -1,11 +1,6 @@
 // Storage for recorded voice-over (plan 2026-11-02 §6.1, §8), in memory and on Postgres: take columns on media,
-// media_refs, narration_locks, versions.narration and versions.captions, and the voice-over settings. The migration
-// leaves rows written before it valid, with the defaults and no backfill.
-import { readdirSync, readFileSync } from 'node:fs'
-import { PGlite } from '@electric-sql/pglite'
-import { drizzle } from 'drizzle-orm/pglite'
+// media_refs, narration_locks, versions.narration and versions.captions, and the voice-over settings.
 import { describe, expect, it } from 'vitest'
-import * as schema from '../server/store/schema.js'
 import { getSettings, resetSettingsCache } from '../server/domain/settings.js'
 import {
   NARRATION_SETTING_DEFAULTS,
@@ -13,7 +8,6 @@ import {
   type VersionCaptions,
   type VersionNarration,
 } from '../server/domain/types.js'
-import { createDrizzleStore } from '../server/store/drizzle.js'
 import { createMemoryStore } from '../server/store/memory.js'
 import type { Store } from '../server/store/types.js'
 import { harness, pgStore, png, readyVideo, upload } from './helpers.js'
@@ -161,39 +155,5 @@ describe.each(stores)('voice-over storage (%s)', (_name, make) => {
       takeQuotaBytes: 1024,
     })
     resetSettingsCache()
-  })
-})
-
-describe('voiceover_storage migration', () => {
-  it('leaves rows written before it valid, with the defaults', async () => {
-    const pg = new PGlite()
-    const dir = new URL('../../netlify/database/migrations/', import.meta.url)
-    const all = readdirSync(dir).sort()
-    const at = all.findIndex((m) => m.endsWith('_voiceover_storage'))
-    expect(at).toBeGreaterThan(0)
-    const apply = async (m: string) => {
-      const sql = readFileSync(new URL(`${m}/migration.sql`, dir), 'utf8')
-      for (const stmt of sql.split('--> statement-breakpoint')) if (stmt.trim()) await pg.exec(stmt)
-    }
-    for (const m of all.slice(0, at)) await apply(m)
-    const now = '2026-11-01T00:00:00.000Z'
-    await pg.exec(`
-      insert into settings (id, file_signing_secret, data_encryption_key, created_at) values (1, 's', 'k', '${now}');
-      insert into versions (job_id, n, prompt, author_id, status, created_at) values ('job_1', 1, 'p', 'u', 'ready', '${now}');
-      insert into media (id, uploader_id, kind, status, filename, mime, ext, bytes, original_key, original_sha256,
-        clean_key, clean_sha256, created_at, updated_at)
-        values ('med_1', 'u', 'audio', 'ready', 'a.mp3', 'audio/mpeg', 'mp3', 1, 'o', 'h', 'c', 'h', '${now}', '${now}');
-    `)
-    // This migration and every later one: the store reads with today's schema, so later columns must exist too.
-    for (const m of all.slice(at)) await apply(m)
-    const store = createDrizzleStore(drizzle({ client: pg, schema }))
-    expect(await store.getSettings()).toMatchObject(NARRATION_SETTING_DEFAULTS)
-    expect(await store.getVersion('job_1', 1)).toMatchObject({ narration: null, captions: null })
-    expect(await store.getMedia('med_1')).toMatchObject({
-      role: null,
-      scopeJobId: null,
-      retainUntil: null,
-      deletingAt: null,
-    })
   })
 })

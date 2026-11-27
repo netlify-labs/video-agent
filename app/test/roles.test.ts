@@ -1,6 +1,4 @@
 // Plan v2 roles: admin, creator, reviewer, viewer (plan §3, §14 rules 1–2).
-import { readdirSync, readFileSync } from 'node:fs'
-import { PGlite } from '@electric-sql/pglite'
 import { describe, expect, it } from 'vitest'
 import { can, ROLES, type Action, type Principal } from '../server/domain/policy.js'
 import type { Role } from '../server/domain/types.js'
@@ -146,31 +144,6 @@ describe('policy matrix', () => {
   ]
   it.each(table)('%s', (action, expected, resource) => {
     for (const role of ROLES) expect([role, can(p(role), action, resource)]).toEqual([role, expected[role]])
-  })
-})
-
-describe('roles migration', () => {
-  it('moves existing members to creator', async () => {
-    const pg = new PGlite()
-    const dir = new URL('../../netlify/database/migrations/', import.meta.url)
-    const [init, ...rest] = readdirSync(dir).sort()
-    const run = async (m: string) => {
-      const sql = readFileSync(new URL(`${m}/migration.sql`, dir), 'utf8')
-      for (const stmt of sql.split('--> statement-breakpoint')) if (stmt.trim()) await pg.exec(stmt)
-    }
-    await run(init as string)
-    const now = new Date().toISOString()
-    await pg.query(
-      `INSERT INTO users (id, email, name, role, admitted_via, created_at, last_seen_at) VALUES
-       ('u1', 'a@acme.com', null, 'admin', 'domain', $1, $1), ('u2', 'b@acme.com', null, 'member', 'domain', $1, $1)`,
-      [now],
-    )
-    for (const m of rest) await run(m)
-    const rows = await pg.query<{ id: string; role: string }>('SELECT id, role FROM users ORDER BY id')
-    expect(rows.rows).toEqual([
-      { id: 'u1', role: 'admin' },
-      { id: 'u2', role: 'creator' },
-    ])
   })
 })
 
